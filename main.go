@@ -71,14 +71,16 @@ func (h *ServiceProxyHandler) refreshURL() {
 }
 
 func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if os.Getenv("DEBUG") != "" {
-		fmt.Printf("[DEBUG] PATT: %-10s REQ-URL:%s -> %s \n", h.Patt, r.URL.String(), h.ServiceURL.String())
-	}
+	fmt.Println("[DEBUG] ServeHTTP()... ")
 
 	h.refreshURL()
 
 	if h.ServiceURL != nil {
-		r.Header.Set("x-proxdnsLb()y-prefix", h.Patt)
+		if os.Getenv("DEBUG") != "" {
+			fmt.Printf("[DEBUG] PATT: %-10s REQ-URL:%s -> %s \n", h.Patt, r.URL.String(), h.ServiceURL.String())
+		}
+
+		r.Header.Set("x-proxy-prefix", h.Patt)
 		h.ProxyHandler.ServeHTTP(w, r)
 	} else {
 		fmt.Fprintf(os.Stderr, "[WARNING] ServiceURL is unknown ...\n")
@@ -110,7 +112,7 @@ func main() {
 		{"uluwatu", "/uluwatu/"},
 		{"sultans", "/sultans/"},
 	} {
-		http.Handle(s.service, NewServiceProxyHandler(s.service, s.patt))
+		http.Handle(s.patt, NewServiceProxyHandler(s.service, s.patt))
 	}
 
 	http.ListenAndServe(port(), nil)
