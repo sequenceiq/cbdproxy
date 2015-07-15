@@ -2,118 +2,116 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 
 	"github.com/benschw/dns-clb-go/clb"
-
-	"golang.org/x/oauth2"
 )
 
-func getGithubConfig() *oauth2.Config {
+func dnsLb() (c clb.LoadBalancer) {
 
-	return &oauth2.Config{
-		ClientID:     "953d27b8258dea6dd658",
-		ClientSecret: "83a3590b8f6611304e1ae8bb595778db518f90f9",
-		Scopes:       []string{"user", "gist"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://github.com/login/oauth/authorize",
-			TokenURL: "https://github.com/login/oauth/access_token",
-		},
-	}
-}
-func getCloudbreakConfig() *oauth2.Config {
-	return &oauth2.Config{
-		ClientID:     "uluwatu",
-		ClientSecret: "cbsecret2015",
-		Scopes:       []string{"openid"},
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "http://b2d:8888/oauth/authorize",
-			TokenURL: "http://b2d:8888/oauth/token",
-		},
-	}
-}
-
-func getToken() {
-
-	fmt.Println("login to uaa ...")
-
-	//conf := getGithubConfig()
-	conf := getCloudbreakConfig()
-	url := conf.AuthCodeURL("state", oauth2.AccessTypeOffline)
-	fmt.Printf("Visit the URL for the auth dialog: %v", url)
-
-	var code string
-	if _, err := fmt.Scan(&code); err != nil {
-		log.Fatal(err)
-	}
-	tok, err := conf.Exchange(oauth2.NoContext, code)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println("GH_TOKEN=", tok.AccessToken, "  refresh=", tok.RefreshToken)
-}
-
-func infoHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, `{"version": 0.1}`)
-}
-
-type Todo struct {
-	Todos []string
-}
-
-func NewTodo() *Todo {
-	return &Todo{[]string{"one", "two", "tre"}}
-}
-
-func (t *Todo) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
-	switch r.Method {
-	case "GET":
-		for i, todo := range t.Todos {
-			fmt.Fprintln(w, " -", i, ":", todo)
+	dnsHost := os.Getenv("DNS_HOST")
+	if dnsHost != "" {
+		dnsPort := os.Getenv("DNS_PORT")
+		if dnsPort == "" {
+			dnsPort = "53"
 		}
-	case "PUT", "POST":
-		b, _ := ioutil.ReadAll(r.Body)
-		t.Todos = append(t.Todos, string(b))
-		fmt.Fprintln(w, "OK")
+
+		c = clb.NewClb(dnsHost, dnsPort, clb.RoundRobin)
+	} else {
+		c = clb.NewDefaultClb(clb.RoundRobin)
 	}
+	return c
 }
 
 func getServiceUrl(s string) *url.URL {
-	c := clb.NewClb("b2d", "53", clb.RoundRobin)
-	addr, err := c.GetAddress(s + ".service.consul")
-	if err != nil {
-		panic(err)
-	}
 
-	fmt.Println("[DEBUG] dns:", addr.String())
+	addr, err := dnsLb().GetAddress(s + ".service.consul")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[WARNING] service: %s isnt registered yet ...", s)
+		return nil
+	}
 
 	url, err := url.Parse("http://" + addr.String())
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "[WARNING] cloudn't parse address: %s", addr.String())
+		return nil
 	}
 	return url
+}
+
+func port() string {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "80"
+	}
+	if port[0] != ':' {
+		port = ":" + port
+	}
+	fmt.Println("[INFO] listening on:", port)
+	return port
+}
+
+type ServiceProxyHandler struct {
+	ServiceName  string
+	Patt         string
+	ServiceURL   *url.URL
+	ProxyHandler http.Handler
+}
+
+func (h *ServiceProxyHandler) refreshURL() {
+	u := getServiceUrl(h.ServiceName)
+	if u != h.ServiceURL {
+		h.ServiceURL = u
+		p := httputil.NewSingleHostReverseProxy(u)
+		h.ProxyHandler = http.StripPrefix(h.Patt, p)
+	}
+}
+
+func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if os.Getenv("DEBUG") != "" {
+		fmt.Printf("[DEBUG] PATT: %-10s REQ-URL:%s -> %s \n", h.Patt, r.URL.String(), h.ServiceURL.String())
+	}
+
+	h.refreshURL()
+
+	if h.ServiceURL != nil {
+		r.Header.Set("x-proxdnsLb()y-prefix", h.Patt)
+		h.ProxyHandler.ServeHTTP(w, r)
+	} else {
+		fmt.Fprintf(os.Stderr, "[WARNING] ServiceURL is unknown ...\n")
+	}
+}
+
+func NewServiceProxyHandler(service string, patt string) *ServiceProxyHandler {
+	if patt == "" {
+		patt = fmt.Sprintf("/%s/", service)
+	}
+	fmt.Println("[INFO] new proxy", patt, "->", service)
+	h := &ServiceProxyHandler{
+		ServiceName: service,
+		Patt:        patt,
+	}
+
+	return h
 
 }
 
 func main() {
-	//getToken()
 
-	http.HandleFunc("/info", infoHandler)
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("."))))
-	http.Handle("/todos/", NewTodo())
-
-	for _, serv := range []string{"cloudbreak", "identity"} {
-		patt := fmt.Sprintf("/%s/", serv)
-		url := getServiceUrl(serv)
-		fmt.Println(patt, "->", url)
-		http.Handle(patt, http.StripPrefix(patt, httputil.NewSingleHostReverseProxy(url)))
+	for _, s := range []struct {
+		service string
+		patt    string
+	}{
+		{"cloudbreak", "/cloudbreak/"},
+		{"identity", "/identity/"},
+		{"uluwatu", "/uluwatu/"},
+		{"sultans", "/sultans/"},
+	} {
+		http.Handle(s.service, NewServiceProxyHandler(s.service, s.patt))
 	}
 
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(port(), nil)
 }
