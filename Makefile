@@ -7,6 +7,7 @@ docker: build
 	docker $(DOCKER_OPTS) build -t sequenceiq/cbdproxy .
 
 test:
+	docker rm -f cbdproxy
 	docker $(DOCKER_OPTS) run -it \
 		--name=cbdproxy \
 		-e DEBUG=1 \
