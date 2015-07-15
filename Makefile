@@ -8,6 +8,8 @@ docker: build
 
 test:
 	docker $(DOCKER_OPTS) run -it \
+		--name=cbdproxy \
+		-e DEBUG=1 \
 		-p 80:80 \
 		--dns 192.168.59.103 \
 		sequenceiq/cbdproxy
