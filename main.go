@@ -67,6 +67,7 @@ func (h *ServiceProxyHandler) refreshURL() {
 		h.ServiceURL = u
 		p := httputil.NewSingleHostReverseProxy(u)
 		h.ProxyHandler = http.StripPrefix(h.Patt, p)
+		fmt.Printf("[DEBUG] proxy created: pattern: %s url: %s", h.Patt, h.ServiceURL.String())
 	}
 }
 
@@ -88,9 +89,6 @@ func (h *ServiceProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 }
 
 func NewServiceProxyHandler(service string, patt string) *ServiceProxyHandler {
-	if patt == "" {
-		patt = fmt.Sprintf("/%s/", service)
-	}
 	fmt.Println("[INFO] new proxy", patt, "->", service)
 	h := &ServiceProxyHandler{
 		ServiceName: service,
@@ -109,8 +107,8 @@ func main() {
 	}{
 		{"cloudbreak", "/cloudbreak/"},
 		{"identity", "/identity/"},
-		{"uluwatu", "/uluwatu/"},
 		{"sultans", "/sultans/"},
+		{"uluwatu", "/"},
 	} {
 		http.Handle(s.patt, NewServiceProxyHandler(s.service, s.patt))
 	}
