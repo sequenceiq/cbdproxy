@@ -1,4 +1,5 @@
 DOCKER_OPTS="--tlsverify=false"
+VERSION=0.0.3
 
 build:
 	GOOS=linux go build -o cbdproxy_linux
@@ -16,4 +17,6 @@ test:
 		sequenceiq/cbdproxy
 
 
-
+release: build
+	gh-release create sequenceiq/cbdproxy $(VERSION)
+	dockerhub-tag create  sequenceiq/cbdproxy $(VERSION) $(VERSION) .
