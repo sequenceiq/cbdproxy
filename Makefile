@@ -1,5 +1,4 @@
 DOCKER_OPTS="--tlsverify=false"
-VERSION=0.0.3
 
 build:
 	GOOS=linux go build -o cbdproxy_linux
@@ -14,9 +13,14 @@ test:
 		-e DEBUG=1 \
 		-p 80:80 \
 		--dns 192.168.59.103 \
-		sequenceiq/cbdproxy
+		sequenceiq/cbdproxy_linux
 
+prepare_release:
+	./generate_new_version.sh
 
 release: build
-	gh-release create sequenceiq/cbdproxy $(VERSION)
-	dockerhub-tag create  sequenceiq/cbdproxy $(VERSION) v$(VERSION) .
+	VERSION=$(shell cat VERSION)
+
+	echo mingya megy ki: $(NEW_VERSION)
+	#gh-release create sequenceiq/cbdproxy $(VERSION)
+	#dockerhub-tag create  sequenceiq/cbdproxy $(VERSION) v$(VERSION) .
