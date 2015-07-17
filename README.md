@@ -13,6 +13,17 @@ Cloudbreak Proxy uses Consul provided dns SRV entries to discover service urls.
 Cloudbreak Proxy is meant to be used as a Docker container. When you use 
 Cloudbreak Deployer (cbd), than Cloudbreak Proxy is managed for you.
 
+## Configuration
+
+Service host:ports are discovered by asking SRV records from dns.
+When used as a docker container, you set the DNS server as `--dns`
+
+If you need an alternative way you can use the `DNS_HOST` and `DNS_PORT`
+environment variables.
+
+By default proxy listens on port 80. You can change it by the `PORT`
+environment variable.
+
 ## Manual start
 
 For troubleshooting purpose, you might want to start it manually,
