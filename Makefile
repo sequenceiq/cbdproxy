@@ -1,4 +1,5 @@
 DOCKER_OPTS="--tlsverify=false"
+VERSION=$(shell cat VERSION)
 
 build:
 	GOOS=linux go build -o cbdproxy_linux
@@ -19,8 +20,5 @@ prepare_release:
 	./generate_new_version.sh
 
 release: build
-	VERSION=$(shell cat VERSION)
-
-	echo mingya megy ki: $(NEW_VERSION)
-	#gh-release create sequenceiq/cbdproxy $(VERSION)
-	#dockerhub-tag create  sequenceiq/cbdproxy $(VERSION) v$(VERSION) .
+	gh-release create sequenceiq/cbdproxy $(VERSION)
+	dockerhub-tag create  sequenceiq/cbdproxy $(VERSION) v$(VERSION) .
